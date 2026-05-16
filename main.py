@@ -6,7 +6,6 @@ from typing import List, Dict, Any
 
 app = FastAPI()
 
-# Allow safe cross-origin resource isolation routing from Vercel deployment servers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,32 +14,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-Memory Volatile Database Core 
+# Advanced Data Matrix Simulator
 DATABASE: Dict[str, Any] = {
     "shifts": []
 }
 
-class ShiftPayload(BaseModel):
+class AdvancedShiftPayload(BaseModel):
     telegram_id: str
-    hours: float
     date: date
+    day_hours: float
+    evening_hours: float
+    night_hours: float
+    is_holiday: bool
 
 @app.get("/api/user-data")
 def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
-    # Filter shifts recorded strictly under the validated user reference signature
+    current_month = date.today().month
+    current_year = date.today().year
+    
     user_shifts = [s for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id]
     
-    # Calculate performance yields dynamically. Zeros evaluate to £0 without breaking data streams
-    monthly_earnings = sum(s["hours"] * hourly_rate for s in user_shifts)
-    weekly_hours = sum(s["hours"] for s in user_shifts)
+    # DYNAMIC MONTHLY ROLL-OVER FILTER: 
+    # Automatically separates financial data tracking metrics when calendar months cycle forward.
+    monthly_shifts = [
+        s for s in user_shifts 
+        if s["date"].month == current_month and s["date"].year == current_year
+    ]
+    
+    # Calculate performance yields dynamically across columns
+    total_monthly_hours = sum((s["day_hours"] + s["evening_hours"] + s["night_hours"]) for s in monthly_shifts)
+    monthly_earnings = total_monthly_hours * hourly_rate
+    
+    # Weekly aggregation logic tracking block
+    weekly_hours = sum((s["day_hours"] + s["evening_hours"] + s["night_hours"]) for s in user_shifts) # In production map to structural ISO week calendar arrays
     
     formatted_shifts = []
     for s in user_shifts:
         formatted_shifts.append({
             "date": s["date"].strftime("%Y-%m-%d"),
-            "hours": s["hours"]
+            "day_hours": s["day_hours"],
+            "evening_hours": s["evening_hours"],
+            "night_hours": s["night_hours"],
+            "is_holiday": s["is_holiday"]
         })
-    
+        
     return {
         "monthlyCumulativeEarnings": monthly_earnings,
         "weeklyTotalHours": weekly_hours,
@@ -48,11 +65,8 @@ def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
     }
 
 @app.post("/api/log-shift")
-def log_user_shift(payload: ShiftPayload):
-    if payload.hours < 0:
-        raise HTTPException(status_code=400, detail="Invalid hours count provided.")
-
-    # ENFORCE ONE ENTRY PER DAY CONSTRAINTS SAFEGUARD (Includes holiday logs)
+def log_user_shift(payload: AdvancedShiftPayload):
+    # Enforce daily input synchronization lock boundary constraints
     already_exists = any(
         s for s in DATABASE["shifts"] 
         if s["telegram_id"] == payload.telegram_id and s["date"] == payload.date
@@ -61,8 +75,8 @@ def log_user_shift(payload: ShiftPayload):
     if already_exists:
         raise HTTPException(
             status_code=400, 
-            detail="Data logging violation: Shift parameter matrix already committed for today."
+            detail="Transaction failed: Today's timesheet parameter record has already locked."
         )
         
     DATABASE["shifts"].append(payload.dict())
-    return {"status": "success", "message": "Transaction written successfully to structural runtime memory."}
+    return {"status": "success", "message": "Triple-shift profile successfully committed to live runtime database."}
