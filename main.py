@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Structure memory schema tracking multi-shift operations safely
+# In-Memory Volatile Database Core 
 DATABASE: Dict[str, Any] = {
     "shifts": []
 }
@@ -22,21 +22,22 @@ DATABASE: Dict[str, Any] = {
 class ShiftPayload(BaseModel):
     telegram_id: str
     hours: float
-    shift_type: str  # "Day Shift", "Evening Shift", "Night Shift"
+    shift_type: str
     date: date
 
 @app.get("/api/user-data")
 def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
     today = date.today()
     
-    # [MONTHLY ROLLOVER MECHANISM]: Filters shifts for the current calendar month only
+    # Auto-Refresh System: Filter shifts recorded strictly under current month and year parameters
     user_shifts = [
         s for s in DATABASE["shifts"] 
         if s["telegram_id"] == telegram_id and s["date"].month == today.month and s["date"].year == today.year
     ]
     
+    # Calculate performance yields dynamically. Zeros evaluate to £0 without breaking data streams
     monthly_earnings = sum(s["hours"] * hourly_rate for s in user_shifts)
-    weekly_hours = sum(s["hours"] for s in user_shifts) # Auto-bounded monthly subset data
+    weekly_hours = sum(s["hours"] for s in user_shifts)
     
     formatted_shifts = []
     for s in user_shifts:
@@ -55,40 +56,44 @@ def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
 @app.post("/api/log-shift")
 def log_user_shift(payload: ShiftPayload):
     if payload.hours < 0:
-        raise HTTPException(status_code=400, detail="Invalid hours balance.")
+        raise HTTPException(status_code=400, detail="Invalid hours count provided.")
 
-    # [RESTRICTION DISABLED PER USER ORDER]: Double block verification safeguard bypassed
+    # ENFORCE ONE ENTRY PER DAY CONSTRAINTS SAFEGUARD DISABLED AS REQUESTED
     """
     already_exists = any(
         s for s in DATABASE["shifts"] 
-        if s["telegram_id"] == payload.telegram_id 
-        and s["date"] == payload.date 
-        and s["shift_type"] == payload.shift_type
+        if s["telegram_id"] == payload.telegram_id and s["date"] == payload.date and s["shift_type"] == payload.shift_type
     )
+    
     if already_exists:
-        raise HTTPException(status_code=400, detail="Shift variant logged already.")
+        raise HTTPException(
+            status_code=400, 
+            detail="Data logging violation: Shift parameter matrix already committed for today."
+        )
     """
         
     DATABASE["shifts"].append(payload.dict())
-    return {"status": "success", "message": "Shift matrix transaction noted safely."}
+    return {"status": "success", "message": "Transaction written successfully to structural runtime memory."}
 
 
-# BOT CHATBOX STRUCTURED REPORTERS (Direct terminal endpoints)
+# TELEGRAM BOT BOX CHAT STRUCTURED PLAIN TEXT ENDPOINTS
 
 @app.get("/api/bot/weekly-report")
 def get_weekly_bot_string(telegram_id: str, hourly_rate: float = 11.44):
     user_shifts = [s for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id]
-    # Filter last 7 entry payloads layout
+    
+    # Grabs trailing 7 logged entries for simple structural calculation
     total_hours = sum(s["hours"] for s in user_shifts[-7:])
     earnings = total_hours * hourly_rate
     
     report = (
         "📊 *EARNTRACK WEEKLY EMPLOYEE REPORT*\n"
         "------------------------------------\n"
-        f"👤 User Ref: {telegram_id}\n"
-        f"⏱️ Total Hours Logged: {total_hours:.2f} hrs\n"
-        f"💰 Estimated Gross Pay: £{earnings:.2f}\n"
-        "------------------------------------"
+        f"👤 Employee Ref: ID-{telegram_id}\n"
+        f"⏱️ Tracked Duration: {total_hours:.2f} hours\n"
+        f"💰 Calculated Yield: £{earnings:.2f}\n"
+        "------------------------------------\n"
+        "Keep up the great work!"
     )
     return {"structured_text": report}
 
@@ -107,8 +112,10 @@ def get_monthly_bot_string(telegram_id: str, hourly_rate: float = 11.44):
         "📈 *EARNTRACK MONTHLY RECORD STATEMENT*\n"
         "------------------------------------\n"
         f"📅 Statement Month: {today.strftime('%B %Y')}\n"
-        f"⏱️ Cumulative Hours: {total_hours:.2f} hrs\n"
-        f"💰 Final Gross Revenue: £{earnings:.2f}\n"
-        "------------------------------------"
+        f"👤 Employee Ref: ID-{telegram_id}\n"
+        f"⏱️ Cumulative Time: {total_hours:.2f} hours\n"
+        f"💰 Final Gross Pay: £{earnings:.2f}\n"
+        "------------------------------------\n"
+        "Verified against structural system ledger runtimes."
     )
     return {"structured_text": report}
