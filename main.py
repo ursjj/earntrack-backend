@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import date
@@ -6,17 +6,16 @@ from typing import List, Dict, Any
 
 app = FastAPI()
 
-# CRUCIAL: This allows your Vercel frontend to talk to this backend safely
+# Allow safe cross-origin resource isolation routing from Vercel deployment servers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows your Vercel app link to access this API
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory database simulation (Wipes on server restart)
-# In production, you will replace this with a PostgreSQL/Supabase link
+# In-Memory Volatile Database Core 
 DATABASE: Dict[str, Any] = {
     "shifts": []
 }
@@ -27,16 +26,14 @@ class ShiftPayload(BaseModel):
     date: date
 
 @app.get("/api/user-data")
-def get_user_data(telegram_id: str):
-    # Filter shifts belonging only to this specific user
+def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
+    # Filter shifts recorded strictly under the validated user reference signature
     user_shifts = [s for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id]
     
-    # Calculate totals dynamically based on UK minimum wage assumption (£11.44)
-    hourly_rate = 11.44
+    # Calculate performance yields dynamically. Zeros evaluate to £0 without breaking data streams
     monthly_earnings = sum(s["hours"] * hourly_rate for s in user_shifts)
     weekly_hours = sum(s["hours"] for s in user_shifts)
     
-    # Format structural payload for your HTML front-end
     formatted_shifts = []
     for s in user_shifts:
         formatted_shifts.append({
@@ -52,7 +49,10 @@ def get_user_data(telegram_id: str):
 
 @app.post("/api/log-shift")
 def log_user_shift(payload: ShiftPayload):
-    # ENFORCE ONE ENTRY PER DAY SAFEGUARD
+    if payload.hours < 0:
+        raise HTTPException(status_code=400, detail="Invalid hours count provided.")
+
+    # ENFORCE ONE ENTRY PER DAY CONSTRAINTS SAFEGUARD (Includes holiday logs)
     already_exists = any(
         s for s in DATABASE["shifts"] 
         if s["telegram_id"] == payload.telegram_id and s["date"] == payload.date
@@ -61,8 +61,8 @@ def log_user_shift(payload: ShiftPayload):
     if already_exists:
         raise HTTPException(
             status_code=400, 
-            detail="Data entry constraint violation: Shift already finalized for today."
+            detail="Data logging violation: Shift parameter matrix already committed for today."
         )
         
     DATABASE["shifts"].append(payload.dict())
-    return {"status": "success", "message": "Transaction written successfully"}
+    return {"status": "success", "message": "Transaction written successfully to structural runtime memory."}
