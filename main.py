@@ -15,7 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BOT_TOKEN = "YOUR_SAVED_BOTFATHER_TOKEN"
+BOT_TOKEN = "8900603550:AAGtsNHlfva6K1WgbFee1hIvISRjR6ePIc4"
 
 DATABASE: Dict[str, Any] = {
     "shifts": []
