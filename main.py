@@ -14,8 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# In-Memory Database Core
 DATABASE: Dict[str, Any] = {
-    "shifts": []
+    "shifts": [],
+    "monthly_earnings_archive": {} # Safely retains earnings history across weekly layout resets
 }
 
 DAYS_INDEX_MAP = {
@@ -36,9 +38,14 @@ class ShiftPayload(BaseModel):
 
 @app.get("/api/user-data")
 def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
+    # Filters active active shifts for the current week horizon only
     user_shifts = [s for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id]
     
-    monthly_earnings = sum(s["hours"] * hourly_rate for s in user_shifts if s["shift_type"] != "HOLIDAY")
+    current_week_earnings = sum(s["hours"] * hourly_rate for s in user_shifts if s["shift_type"] != "HOLIDAY")
+    archived_earnings = DATABASE["monthly_earnings_archive"].get(telegram_id, 0.0)
+    
+    # Combined calculations ensure your visual metrics bars remain accurate
+    total_monthly_earnings = archived_earnings + current_week_earnings
     weekly_hours = sum(s["hours"] for s in user_shifts if s["shift_type"] != "HOLIDAY")
     
     formatted = []
@@ -50,7 +57,7 @@ def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
         })
         
     return {
-        "monthlyCumulativeEarnings": monthly_earnings,
+        "monthlyCumulativeEarnings": total_monthly_earnings,
         "weeklyTotalHours": weekly_hours,
         "weekShifts": formatted
     }
@@ -59,6 +66,19 @@ def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
 def log_user_shift(payload: ShiftPayload):
     DATABASE["shifts"].append(payload.dict())
     return {"status": "success"}
+
+# ENDPOINT: AUTOMATICALLY CLEARS THE CURRENT WEEK RECORDS ONCE SUNDAY DATA SUBMISSION CLOSES
+@app.get("/api/clear-week")
+def clear_week_horizon(telegram_id: str, hourly_rate: float = 11.44):
+    user_shifts = [s for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id]
+    week_earnings = sum(s["hours"] * hourly_rate for s in user_shifts if s["shift_type"] != "HOLIDAY")
+    
+    # Archives the finished week's total pay so it doesn't get wiped from your monthly target bar
+    DATABASE["monthly_earnings_archive"][telegram_id] = DATABASE["monthly_earnings_archive"].get(telegram_id, 0.0) + week_earnings
+    
+    # Removes the completed week's data layout structure, resetting the calendar dashboard to clean states
+    DATABASE["shifts"] = [s for s in DATABASE["shifts"] if s["telegram_id"] != telegram_id]
+    return {"status": "success", "message": "Week horizon reset cleanly. Prepared for upcoming billing parameters."}
 
 @app.get("/api/bot/weekly-report")
 def get_structured_timesheet(telegram_id: str, username: str = "Joseph", hourly_rate: float = 11.44, target: float = 1500.0, limit: float = 40.0):
@@ -90,7 +110,9 @@ def get_structured_timesheet(telegram_id: str, username: str = "Joseph", hourly_
     total_weekly_gross = total_weekly_hours * hourly_rate
     overtime = max(0.0, total_weekly_hours - limit)
     overtime_str = f" (Overtime: +{overtime:.2f}h)" if overtime > 0 else ""
-    monthly_accumulated = sum(s["hours"] * hourly_rate for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id and s["shift_type"] != "HOLIDAY")
+    
+    archived_earnings = DATABASE["monthly_earnings_archive"].get(telegram_id, 0.0)
+    total_monthly_accumulated = archived_earnings + total_weekly_gross
 
     return {
         "structured_text": (
@@ -103,6 +125,6 @@ def get_structured_timesheet(telegram_id: str, username: str = "Joseph", hourly_
             "---------------------------------------------\n"
             f"Total Weekly Hours:  {total_weekly_hours:.2f} hrs{overtime_str}\n"
             f"Total Weekly Gross:  £{total_weekly_gross:.2f} 💸\n"
-            f"Monthly Target Accumulation: £{monthly_accumulated:.2f} / £{target:.0f}"
+            f"Monthly Target Accumulation: £{total_monthly_accumulated:.2f} / £{target:.0f}"
         )
     }
