@@ -29,13 +29,12 @@ class ShiftPayload(BaseModel):
 def get_user_data(telegram_id: str, hourly_rate: float = 11.44):
     today = date.today()
     
-    # Auto-Refresh System: Filter shifts recorded strictly under current month and year parameters
+    # Auto-Refresh: Filter shifts recorded strictly under current month and year parameters
     user_shifts = [
         s for s in DATABASE["shifts"] 
         if s["telegram_id"] == telegram_id and s["date"].month == today.month and s["date"].year == today.year
     ]
     
-    # Calculate performance yields dynamically. Zeros evaluate to £0 without breaking data streams
     monthly_earnings = sum(s["hours"] * hourly_rate for s in user_shifts)
     weekly_hours = sum(s["hours"] for s in user_shifts)
     
@@ -82,7 +81,6 @@ def log_user_shift(payload: ShiftPayload):
 def get_weekly_bot_string(telegram_id: str, hourly_rate: float = 11.44):
     user_shifts = [s for s in DATABASE["shifts"] if s["telegram_id"] == telegram_id]
     
-    # Grabs trailing 7 logged entries for simple structural calculation
     total_hours = sum(s["hours"] for s in user_shifts[-7:])
     earnings = total_hours * hourly_rate
     
